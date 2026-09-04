@@ -19,6 +19,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from fleet_monitor.config import load_config  # noqa: E402
+from fleet_monitor.geo import locate  # noqa: E402
 from fleet_monitor.storage import Storage  # noqa: E402
 
 st.set_page_config(
@@ -117,9 +118,10 @@ def main() -> None:
     view["负载"] = view["load1"].round(2)
     view["耗时 ms"] = view["elapsed_ms"]
     view["备注"] = view["error"].fillna("")
+    view["服务器位置"] = view["host"].apply(locate)
 
     st.dataframe(
-        view[["name", "host", "状态", "CPU %", "内存 %", "磁盘 %", "负载", "耗时 ms", "备注"]],
+        view[["name", "host", "服务器位置", "状态", "CPU %", "内存 %", "磁盘 %", "负载", "耗时 ms", "备注"]],
         use_container_width=True,
         hide_index=True,
     )
@@ -182,11 +184,12 @@ def main() -> None:
             ldf["登录时间"] = pd.to_datetime(
                 ldf["observed_at"], errors="coerce", utc=True
             )
+            ldf["来源 IP 位置"] = ldf["from_ip"].apply(locate)
 
             col_a, col_b = st.columns([3, 2])
             with col_a:
                 st.dataframe(
-                    ldf[["主机", "username", "from_ip", "login_time", "duration", "source"]]
+                    ldf[["主机", "username", "from_ip", "来源 IP 位置", "login_time", "duration", "source"]]
                     .rename(columns={
                         "username": "用户", "from_ip": "来源 IP",
                         "login_time": "登录时刻", "duration": "时长", "source": "来源",
@@ -203,6 +206,7 @@ def main() -> None:
                 )
                 ip_counts.columns = ["IP", "次数"]
                 if not ip_counts.empty:
+                    ip_counts["位置"] = ip_counts["IP"].apply(locate)
                     st.dataframe(ip_counts, use_container_width=True, hide_index=True)
                 else:
                     st.caption("未发现 IPv4 来源记录")
@@ -212,8 +216,9 @@ def main() -> None:
             if known:
                 kdf = pd.DataFrame(known)
                 kdf["主机"] = kdf["server_id"].map(name_map).fillna(kdf["server_id"])
+                kdf["位置"] = kdf["ip"].apply(locate)
                 st.dataframe(
-                    kdf[["主机", "ip", "first_seen", "last_seen"]].rename(columns={
+                    kdf[["主机", "ip", "位置", "first_seen", "last_seen"]].rename(columns={
                         "ip": "IP", "first_seen": "首次出现", "last_seen": "最近出现",
                     }),
                     use_container_width=True,
