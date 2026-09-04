@@ -231,6 +231,11 @@ fleet-monitor 只能采集**它自己能 SSH 到**的目标。你的服务器里
 
 1. **配置文件绝不入库** —— `config/servers.yaml` 已被 `.gitignore` 排除，迁移脚本自动设为 600 权限。
 2. **优先用 SSH 密钥** —— 迁移生成的是明文密码，建议尽快换成 `auth.key_path`。
+   一键升级（幂等，用现有密码登录后追加公钥，部署后用密钥验证）：
+   ```bash
+   python scripts/deploy_keys.py        # 先确认 servers.yaml 里密码仍有效
+   # 然后把对应主机的 auth 改为 key_path: "~/.ssh/fleet_monitor_ed25519"
+   ```
 3. **主机指纹校验** —— 当前用 `AutoAddPolicy`（等价旧版 `-o StrictHostKeyChecking=no`），
    会跳过指纹校验。在不可信网络下应改为 `load_system_host_keys` + `RejectPolicy`。
 4. **告警推送** —— 配置 `notify.webhook_url` 可推送到企业微信 / Telegram / Server酱，
