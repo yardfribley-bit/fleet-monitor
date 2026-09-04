@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import sys
 from pathlib import Path
 
@@ -47,13 +48,48 @@ def _read_authorized_keys(client: paramiko.SSHClient) -> str:
     return out.read().decode("utf-8", errors="replace")
 
 
-def _append_key(client: paramiko.SSHClient, pubkey: str) -> None:
-    block = f"{AUTHKEYS_HEADER}\n{pubkey}\n"
+def _cleanup_stale(client: paramiko.SSHClient) -> None:
+    """删除历史部署残留的 fleet-monitor 行（含早期 repr() 污染的脏行）。
+
+    只精确匹配带本脚本标记的行，不触碰用户已有的其他公钥。
+    """
     cmd = (
-        "printf '%s' " + repr(block) + " >> ~/.ssh/authorized_keys && "
+        "grep -v 'fleet-monitor (deployed by scripts/deploy_keys.py)' "
+        "~/.ssh/authorized_keys > ~/.ssh/.ak.tmp 2>/dev/null; "
+        "mv ~/.ssh/.ak.tmp ~/.ssh/authorized_keys 2>/dev/null; "
         "chmod 600 ~/.ssh/authorized_keys"
     )
     client.exec_command(cmd)[1].read()
+
+
+def _append_key(client: paramiko.SSHClient, pubkey: str) -> None:
+    # 用 base64 承载公钥块，彻底规避 shell 转义（换行符不会再被 repr 破坏）
+    block = f"{AUTHKEYS_HEADER}\n{pubkey}\n"
+    b64 = base64.b64encode(block.encode("utf-8")).decode("ascii")
+    cmd = (
+        f"echo {b64} | base64 -d >> ~/.ssh/authorized_keys && "
+        "chmod 600 ~/.ssh/authorized_keys"
+    )
+    client.exec_command(cmd)[1].read()
+
+
+def _verify_key_auth(server, timeout: int) -> None:
+    """用 key_filename 方式验证密钥认证（比手动 from_private_key_file 更可靠）。"""
+    v = paramiko.SSHClient()
+    v.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        v.connect(
+            server.host,
+            port=server.port,
+            username=server.username,
+            key_filename=str(Path.home() / ".ssh/fleet_monitor_ed25519"),
+            look_for_keys=False,
+            timeout=timeout,
+            banner_timeout=timeout,
+            auth_timeout=timeout,
+        )
+    finally:
+        v.close()
 
 
 def deploy_one(server, pubkey: str, timeout: int = 15) -> tuple[bool, str]:
@@ -75,28 +111,18 @@ def deploy_one(server, pubkey: str, timeout: int = 15) -> tuple[bool, str]:
 
     try:
         _ssh_dir(client)
+        # 先清掉历史污染行（早期 repr() bug 产生的脏行），再判断是否已存在
+        _cleanup_stale(client)
         existing = _read_authorized_keys(client)
         if pubkey.strip() in existing:
-            return True, "公钥已存在，跳过"
+            _verify_key_auth(server, timeout)
+            return True, "公钥已存在，密钥认证验证通过"
 
         _append_key(client, pubkey)
         client.close()
 
         # 2) 用密钥验证
-        key = paramiko.Ed25519Key.from_private_key_file(
-            str(Path.home() / ".ssh/fleet_monitor_ed25519")
-        )
-        v = paramiko.SSHClient()
-        v.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        v.connect(
-            server.host,
-            port=server.port,
-            username=server.username,
-            pkey=key,
-            timeout=timeout,
-            banner_timeout=timeout,
-        )
-        v.close()
+        _verify_key_auth(server, timeout)
         return True, "已部署，密钥登录验证通过"
     except Exception as exc:  # noqa: BLE001
         return False, f"部署后验证失败: {type(exc).__name__}: {exc}"
