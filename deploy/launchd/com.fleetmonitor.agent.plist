@@ -21,6 +21,7 @@
     <array>
         <string>/bin/bash</string>
         <string>/Users/jatsmith/WorkBuddy/code/fleet-monitor/scripts/start.sh</string>
+        <string>-s</string>
     </array>
 
     <key>WorkingDirectory</key>
