@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  macOS 本机常驻方案（launchd）
+  安装：
+    mkdir -p ~/Library/LaunchAgents
+    cp deploy/launchd/com.fleetmonitor.agent.plist ~/Library/LaunchAgents/
+    # 修改下方 ProgramArguments 中的项目路径为你的实际路径
+    launchctl load ~/Library/LaunchAgents/com.fleetmonitor.agent.plist
+  查看日志：
+    log stream --predicate 'subsystem == "com.fleetmonitor"' --style compact
+  注意：Mac 休眠/关机期间采集会中断（与旧版 DeepSeekBalance 相同的限制），
+  建议部署在常开主机上。
+-->
+<dict>
+    <key>Label</key>
+    <string>com.fleetmonitor.agent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/jatsmith/WorkBuddy/code/fleet-monitor/scripts/start.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jatsmith/WorkBuddy/code/fleet-monitor</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/fleet-monitor.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/fleet-monitor.stderr.log</string>
+</dict>
+</plist>

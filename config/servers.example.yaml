@@ -1,0 +1,67 @@
+# fleet-monitor 配置模板
+# 复制为 servers.yaml 后填写真实信息（servers.yaml 已被 .gitignore 排除）
+#
+# 安全提示：优先使用 SSH 密钥或 password_env，避免明文密码入库。
+
+schedule:
+  # 每 30 分钟执行一次（标准 cron 表达式）
+  cron: "*/30 * * * *"
+  timezone: "Asia/Shanghai"
+
+storage:
+  sqlite_path: "data/fleet.db"
+  retention_days: 90
+
+collect:
+  timeout_seconds: 8      # 单次 SSH 连接超时
+  command_timeout: 15     # 单条命令执行超时
+  max_workers: 10         # 并发采集线程数
+  retries: 2              # 单台失败重试次数
+  retry_delay_seconds: 5
+
+alerts:
+  memory_percent: 90      # 内存使用率阈值
+  disk_percent: 85        # 磁盘使用率阈值
+  swap_percent: 80        # Swap 使用率阈值
+  load_per_core: 4.0      # 每核负载阈值
+  offline: true           # 主机离线告警
+  new_login_ip: true      # 出现新的 SSH 来源 IP 时告警
+  cooldown_minutes: 60    # 同一告警的冷却窗口，避免重复轰炸
+
+notify:
+  # 留空则只写入日志文件与数据库
+  # 支持企业微信机器人 / Telegram / Server酱 等接受 JSON POST 的地址
+  webhook_url: ""
+  # 可选：额外的请求头，例如 {"Authorization": "Bearer xxx"}
+  webhook_headers: {}
+
+# 服务器清单
+servers:
+  - name: "示例机-密钥认证"
+    host: "192.0.2.10"
+    port: 22
+    username: "root"
+    enabled: true
+    disk_paths: ["/"]
+    auth:
+      key_path: "~/.ssh/id_ed25519"
+      # passphrase: ""      # 密钥有密码时填写
+
+  - name: "示例机-环境变量密码"
+    host: "192.0.2.11"
+    port: 22
+    username: "ubuntu"
+    enabled: true
+    disk_paths: ["/"]
+    auth:
+      # 从环境变量读取，避免明文出现在配置文件里
+      password_env: "NODE_B_PASSWORD"
+
+  - name: "示例机-明文密码（不推荐）"
+    host: "192.0.2.12"
+    port: 2222
+    username: "root"
+    enabled: false          # 设为 false 可临时停用，配置保留
+    disk_paths: ["/", "/data"]
+    auth:
+      password: "change-me"

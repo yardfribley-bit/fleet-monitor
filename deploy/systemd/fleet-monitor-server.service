@@ -1,0 +1,18 @@
+[Unit]
+Description=Prefect server (scheduler + UI) for fleet-monitor
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/fleet-monitor
+Environment="PATH=/opt/fleet-monitor/.venv/bin"
+Environment="PREFECT_HOME=/opt/fleet-monitor/.prefect"
+Environment="NO_PROXY=127.0.0.1,localhost,::1"
+Environment="no_proxy=127.0.0.1,localhost,::1"
+ExecStart=/opt/fleet-monitor/.venv/bin/prefect server start --port 4200
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
