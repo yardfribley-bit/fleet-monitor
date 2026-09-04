@@ -61,7 +61,7 @@ def convert_timestamp(value: float) -> str:
     return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
 
 
-def migrate_history(source_dir: Path, db_path: Path) -> int:
+def migrate_history(source_dir: Path, db_path: Path, servers: list[dict]) -> int:
     """迁移 server_history.json 到新数据库。"""
     import sqlite3
 
@@ -69,6 +69,14 @@ def migrate_history(source_dir: Path, db_path: Path) -> int:
     if not path.exists():
         print(f"  [跳过] 历史文件不存在: {path}")
         return 0
+
+    # 旧 serverId（可能是 Core Data UUID）-> 新 server_id（SRV-{host}）映射。
+    # 旧版个别服务器（如家里服务器）的 id 是 UUID，直接落库会产生"幽灵主机"。
+    id_map = {
+        s.get("id"): f"SRV-{s.get('host', '').partition(':')[0].replace('.', '-')}"
+        for s in servers
+        if s.get("id") and s.get("host")
+    }
 
     with path.open("r", encoding="utf-8") as f:
         entries = json.load(f)
@@ -85,6 +93,8 @@ def migrate_history(source_dir: Path, db_path: Path) -> int:
             ts = entry.get("timestamp")
             if not isinstance(ts, (int, float)):
                 continue
+            raw_id = entry.get("serverId", "")
+            server_id = id_map.get(raw_id, raw_id)
             conn.execute(
                 """
                 INSERT INTO snapshots (
@@ -93,7 +103,7 @@ def migrate_history(source_dir: Path, db_path: Path) -> int:
                 ) VALUES (?,?,?,?,?,?,?)
                 """,
                 (
-                    entry.get("serverId", ""),
+                    server_id,
                     convert_timestamp(ts),
                     int(bool(entry.get("online", False))),
                     float(entry.get("memPercent", 0) or 0),
@@ -195,7 +205,7 @@ def main() -> int:
 
     if args.with_history:
         print("\n迁移历史数据...")
-        count = migrate_history(source_dir, Path(args.history_db))
+        count = migrate_history(source_dir, Path(args.history_db), old_servers)
         print(f"  已迁移 {count} 条历史快照")
         print("  注意: 旧版本不采集 CPU 使用率，历史数据的 cpu_percent 为空")
 

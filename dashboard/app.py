@@ -41,6 +41,12 @@ def get_name_map() -> dict[str, str]:
     return {s.server_id: s.name for s in cfg.servers}
 
 
+@st.cache_resource
+def get_host_map() -> dict[str, str]:
+    cfg = load_config()
+    return {s.server_id: s.host for s in cfg.servers}
+
+
 @st.cache_data(ttl=30)
 def load_latest() -> pd.DataFrame:
     rows = get_storage().latest_statuses()
@@ -48,7 +54,9 @@ def load_latest() -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
     name_map = get_name_map()
+    host_map = get_host_map()
     df["name"] = df["server_id"].map(name_map).fillna(df["server_id"])
+    df["host"] = df["server_id"].map(host_map).fillna(df["server_id"])
     if "timestamp" in df.columns:
         df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce", utc=True)
     return df
